@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>محرر Markdown إلى Word</title>
+    <!-- روابط CDN للمكتبات -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html-docx-js/0.4.2/html-docx.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.0/dist/purify.min.js"></script>
+    <style>
+        /* تنسيقات عامة */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Times New Roman', 'DejaVu Serif', serif;
+            line-height: 1.6;
+            color: #000;
+            background-color: #f5f5f5;
+            padding: 20px;
+            direction: rtl;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+        
+        /* تنسيقات منطقة الإدخال */
+        .input-section {
+            margin-bottom: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            direction: rtl;
+            resize: vertical;
+        }
+        
+        .buttons {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            padding: 8px 15px;
+            background-color: #4a6fa5;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        button:hover {
+            background-color: #3a5a8a;
+        }
+        
+        /* تنسيقات منطقة المحرر */
+        .editor-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .page {
+            background: white;
+            width: 210mm;
+            min-height: 297mm;
+            margin: 0 auto;
+            padding: 12mm; /* تغيير قيمة الهوامش هنا */
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            position: relative;
+            direction: rtl;
+            overflow: visible;
+        }
+        
+        .editor {
+            outline: none;
+            height: 100%;
+            font-family: 'Times New Roman', 'DejaVu Serif', serif;
+            font-size: 12pt;
+            line-height: 1.6;
+        }
+        
+        /* تنسيقات الطباعة */
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+            
+            .input-section, .buttons {
+                display: none;
+            }
+            
+            .page {
+                box-shadow: none;
+                margin: 0;
+                padding: 12mm;
+                page-break-after: always;
+            }
+            
+            .editor-container {
+                gap: 0;
+            }
+        }
+        
+        @page {
+            size: A4;
+            margin: 12mm;
+        }
+        
+        /* تنسيقات Markdown بعد التحويل */
+        .editor h1 {
+            font-size: 18pt;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #000;
+            padding-bottom: 5px;
+        }
+        
+        .editor h2 {
+            font-size: 16pt;
+            margin-top: 18px;
+            margin-bottom: 8px;
+        }
+        
+        .editor h3 {
+            font-size: 14pt;
+            margin-top: 16px;
+            margin-bottom: 6px;
+        }
+        
+        .editor p {
+            margin-bottom: 10px;
+            text-align: justify;
+        }
+        
+        .editor ul, .editor ol {
+            margin-right: 20px;
+            margin-bottom: 10px;
+        }
+        
+        .editor li {
+            margin-bottom: 5px;
+        }
+        
+        .editor table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+            page-break-inside: avoid;
+        }
+        
+        .editor table, .editor th, .editor td {
+            border: 1px solid #000;
+        }
+        
+        .editor th, .editor td {
+            padding: 8px;
+            text-align: right;
+        }
+        
+        .editor code {
+            background-color: #f5f5f5;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        
+        .editor pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+            margin-bottom: 15px;
+        }
+        
+        .editor blockquote {
+            border-right: 3px solid #ccc;
+            margin-right: 15px;
+            padding-right: 15px;
+            font-style: italic;
+        }
+        
+        .editor a {
+            color: #4a6fa5;
+            text-decoration: underline;
+        }
+        
+        .status {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #4a6fa5;
+            text-align: center;
+        }
+        
+        .filename-input {
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .filename-input input {
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            flex: 1;
+        }
+        
+        .page-number {
+            position: absolute;
+            bottom: 10mm;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 10pt;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>محرر Markdown إلى Word</h1>
+        
+        <div class="input-section">
+            <textarea id="markdown-input" placeholder="أدخل نص Markdown باللغة العربية هنا..."></textarea>
+            
+            <div class="filename-input">
+                <label for="filename-input">اسم الملف:</label>
+                <input type="text" id="filename-input" value="المستند">
+            </div>
+            
+            <div class="buttons">
+                <button type="button" id="convert-btn">تحويل Markdown</button>
+                <button type="button" id="save-btn">حفظ يدوي</button>
+                <button type="button" id="export-btn">تصدير إلى Word</button>
+                <button type="button" id="export-html-btn">حفظ كـ HTML</button>
+                <button type="button" id="print-btn">طباعة</button>
+                <button type="button" id="clear-btn">مسح الكل</button>
+                <button type="button" id="restore-btn">استعادة من Markdown</button>
+            </div>
+            
+            <div class="status" id="status-message"></div>
+        </div>
+        
+        <div class="editor-container" id="editor-container">
+            <div class="page">
+                <div id="editor" class="editor" contenteditable="true"></div>
+                <div class="page-number">الصفحة 1</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // تهيئة marked.js
+        marked.setOptions({
+            breaks: true,
+            gfm: true,
+            langPrefix: 'language-'
+        });
+        
+        // عناصر DOM
+        const markdownInput = document.getElementById('markdown-input');
+        const convertBtn = document.getElementById('convert-btn');
+        const saveBtn = document.getElementById('save-btn');
+        const exportBtn = document.getElementById('export-btn');
+        const exportHtmlBtn = document.getElementById('export-html-btn');
+        const printBtn = document.getElementById('print-btn');
+        const clearBtn = document.getElementById('clear-btn');
+        const restoreBtn = document.getElementById('restore-btn');
+        const editor = document.getElementById('editor');
+        const editorContainer = document.getElementById('editor-container');
+        const statusMessage = document.getElementById('status-message');
+        const filenameInput = document.getElementById('filename-input');
+        
+        // متغيرات للتحكم بالحفظ التلقائي ورسائل الحالة
+        let saveTimeout = null;
+        let statusTimeout = null;
+        let isAutoSaving = false;
+        
+        // تحويل Markdown إلى HTML وعرضه في المحرر
+        function convertMarkdown() {
+            const markdownText = markdownInput.value;
+            const htmlContent = marked.parse(markdownText);
+            const safeHTML = DOMPurify.sanitize(htmlContent);
+            editor.innerHTML = safeHTML;
+            
+            // حفظ تلقائي بعد التحويل
+            saveToLocalStorage();
+            showStatus('تم تحويل Markdown إلى HTML');
+            
+            // تحديث تخطيط الصفحات
+            updatePageLayout();
+        }
+        
+        // حفظ المحتوى إلى localStorage
+        function saveToLocalStorage() {
+            const contentHTML = DOMPurify.sanitize(editor.innerHTML);
+            localStorage.setItem('markdownEditorContent', contentHTML);
+            localStorage.setItem('markdownInputText', markdownInput.value);
+            
+            if (!isAutoSaving) {
+                showStatus('تم حفظ المحتوى');
+            }
+        }
+        
+        // استعادة المحتوى من localStorage
+        function loadFromLocalStorage() {
+            const savedHTML = localStorage.getItem('markdownEditorContent');
+            const savedMD = localStorage.getItem('markdownInputText');
+            
+            if (savedHTML) {
+                editor.innerHTML = savedHTML;
+            }
+            
+            if (savedMD) {
+                markdownInput.value = savedMD;
+            }
+            
+            if (savedHTML || savedMD) {
+                showStatus('تم استعادة المحتوى المحفوظ');
+            }
+            
+            // تحديث تخطيط الصفحات
+            setTimeout(updatePageLayout, 100);
+        }
+        
+        // تحديث تخطيط الصفحات
+        function updatePageLayout() {
+            // حساب ارتفاع المحتوى
+            const contentHeight = editor.scrollHeight;
+            const pageHeight = 297; // ارتفاع A4 بالمليمتر
+            const margin = 12; // الهوامش
+            const contentAreaHeight = pageHeight - (2 * margin);
+            
+            // تحويل الوحدات (تقريبي)
+            const contentAreaHeightPx = (contentAreaHeight / 25.4) * 96; // تحويل mm إلى px
+            
+            // إذا كان المحتوى يتجاوز صفحة واحدة
+            if (contentHeight > contentAreaHeightPx) {
+                showStatus('المحتوى يتجاوز صفحة واحدة، سيتم تقسيمه في ملف Word');
+            }
+        }
+        
+        // تصدير إلى Word باستخدام html-docx-js
+        function exportToWord() {
+            const safeHTML = DOMPurify.sanitize(editor.innerHTML);
+            const filename = filenameInput.value || 'المستند';
+            
+            // تقسيم المحتوى إلى صفحات متعددة
+            const pages = splitContentIntoPages(safeHTML);
+            
+            // إنشاء محتوى HTML مع صفحات متعددة
+            let fullHTML = '';
+            pages.forEach((pageContent, index) => {
+                fullHTML += `
+                <div style="page-break-after: ${index < pages.length - 1 ? 'always' : 'auto'};">
+                    <div style="direction: rtl; text-align: right; font-family: 'Times New Roman', serif; margin: 12mm; min-height: 273mm;">
+                        ${pageContent}
+                        ${pages.length > 1 ? `<div style="text-align: center; margin-top: 10mm; font-size: 10pt; color: #666;">الصفحة ${index + 1}</div>` : ''}
+                    </div>
+                </div>`;
+            });
+            
+            // إعداد HTML مع تنسيقات RTL
+            const html = `<!DOCTYPE html>
+            <html dir="rtl" lang="ar">
+            <head>
+                <meta charset="UTF-8">
+                <style>
+                    body { 
+                        direction: rtl; 
+                        text-align: right; 
+                        font-family: "Times New Roman", serif; 
+                        margin: 0;
+                    }
+                    table { 
+                        width: 100%; 
+                        border-collapse: collapse; 
+                        margin-bottom: 15px;
+                    }
+                    table, th, td { 
+                        border: 1px solid black; 
+                    }
+                    th, td { 
+                        padding: 8px; 
+                        text-align: right; 
+                    }
+                    h1 { 
+                        font-size: 18pt; 
+                        margin-top: 20px;
+                        margin-bottom: 10px;
+                    }
+                    h2 { 
+                        font-size: 16pt; 
+                        margin-top: 18px;
+                        margin-bottom: 8px;
+                    }
+                    h3 { 
+                        font-size: 14pt; 
+                        margin-top: 16px;
+                        margin-bottom: 6px;
+                    }
+                    p { 
+                        margin-bottom: 10px; 
+                        text-align: justify;
+                    }
+                    ul, ol { 
+                        margin-right: 20px; 
+                        margin-bottom: 10px; 
+                    }
+                    code { 
+                        background-color: #f5f5f5; 
+                        padding: 2px 4px; 
+                    }
+                    pre { 
+                        background-color: #f5f5f5; 
+                        padding: 10px; 
+                        margin-bottom: 15px; 
+                    }
+                    @page {
+                        size: A4;
+                        margin: 12mm;
+                    }
+                </style>
+            </head>
+            <body>${fullHTML}</body>
+            </html>`;
+            
+            try {
+                const converted = htmlDocx.asBlob(html);
+                saveAs(converted, `${filename}.docx`);
+                showStatus(`تم تصدير الملف إلى Word (${pages.length} صفحة)`);
+            } catch (err) {
+                console.error('Export error:', err);
+                showStatus('فشل التصدير إلى Word', true);
+            }
+        }
+        
+        // تقسيم المحتوى إلى صفحات متعددة
+        function splitContentIntoPages(htmlContent) {
+            // هذا تقسيم مبسط للمحتوى
+            // في التطبيق الحقيقي، يمكن استخدام خوارزمية أكثر تطوراً لتقسيم المحتوى
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = htmlContent;
+            
+            const elements = Array.from(tempDiv.children);
+            const pages = [];
+            let currentPageContent = '';
+            let currentPageHeight = 0;
+            const maxPageHeight = 800; // ارتفاع تقريبي للصفحة بالبكسل
+            
+            elements.forEach(element => {
+                const elementHeight = estimateElementHeight(element);
+                
+                if (currentPageHeight + elementHeight > maxPageHeight && currentPageContent !== '') {
+                    pages.push(currentPageContent);
+                    currentPageContent = element.outerHTML;
+                    currentPageHeight = elementHeight;
+                } else {
+                    currentPageContent += element.outerHTML;
+                    currentPageHeight += elementHeight;
+                }
+            });
+            
+            if (currentPageContent !== '') {
+                pages.push(currentPageContent);
+            }
+            
+            // إذا لم يكن هناك تقسيم، نعيد المحتوى كصفحة واحدة
+            return pages.length > 0 ? pages : [htmlContent];
+        }
+        
+        // تقدير ارتفاع العنصر (تقريبي)
+        function estimateElementHeight(element) {
+            const tagName = element.tagName.toLowerCase();
+            
+            // تقديرات تقريبية لارتفاعات العناصر المختلفة
+            const heightEstimates = {
+                'h1': 40,
+                'h2': 35,
+                'h3': 30,
+                'p': 25,
+                'ul': 30,
+                'ol': 30,
+                'li': 20,
+                'table': 100,
+                'pre': 80,
+                'blockquote': 30
+            };
+            
+            return heightEstimates[tagName] || 30;
+        }
+        
+        // تصدير إلى HTML
+        function exportToHTML() {
+            const safeHTML = DOMPurify.sanitize(editor.innerHTML);
+            const filename = filenameInput.value || 'المستند';
+            
+            // إعداد HTML كامل مع تنسيقات
+            const htmlContent = `<!DOCTYPE html>
+            <html dir="rtl" lang="ar">
+            <head>
+                <meta charset="UTF-8">
+                <title>${filename}</title>
+                <style>
+                    body { 
+                        direction: rtl; 
+                        text-align: right; 
+                        font-family: "Times New Roman", serif; 
+                        margin: 20px;
+                        line-height: 1.6;
+                        color: #000;
+                        background-color: white;
+                    }
+                    .page {
+                        max-width: 210mm;
+                        margin: 0 auto;
+                        padding: 20px;
+                    }
+                    table { 
+                        width: 100%; 
+                        border-collapse: collapse; 
+                        margin-bottom: 15px;
+                    }
+                    table, th, td { 
+                        border: 1px solid black; 
+                    }
+                    th, td { 
+                        padding: 8px; 
+                        text-align: right; 
+                    }
+                    h1 { 
+                        font-size: 18pt; 
+                        margin-top: 20px;
+                        margin-bottom: 10px;
+                        border-bottom: 1px solid #000;
+                        padding-bottom: 5px;
+                    }
+                    h2 { 
+                        font-size: 16pt; 
+                        margin-top: 18px;
+                        margin-bottom: 8px;
+                    }
+                    h3 { 
+                        font-size: 14pt; 
+                        margin-top: 16px;
+                        margin-bottom: 6px;
+                    }
+                    p { 
+                        margin-bottom: 10px; 
+                        text-align: justify;
+                    }
+                    ul, ol { 
+                        margin-right: 20px; 
+                        margin-bottom: 10px; 
+                    }
+                    li {
+                        margin-bottom: 5px;
+                    }
+                    code { 
+                        background-color: #f5f5f5; 
+                        padding: 2px 4px; 
+                        border-radius: 3px;
+                        font-family: monospace;
+                    }
+                    pre { 
+                        background-color: #f5f5f5; 
+                        padding: 10px; 
+                        border-radius: 5px;
+                        overflow-x: auto;
+                        margin-bottom: 15px; 
+                    }
+                    blockquote {
+                        border-right: 3px solid #ccc;
+                        margin-right: 15px;
+                        padding-right: 15px;
+                        font-style: italic;
+                    }
+                    a {
+                        color: #4a6fa5;
+                        text-decoration: underline;
+                    }
+                    @media print {
+                        body {
+                            margin: 0;
+                        }
+                        .page {
+                            padding: 12mm;
+                            page-break-after: always;
+                        }
+                    }
+                    @page {
+                        size: A4;
+                        margin: 12mm;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="page">
+                    ${safeHTML}
+                </div>
+            </body>
+            </html>`;
+            
+            try {
+                const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+                saveAs(blob, `${filename}.html`);
+                showStatus('تم حفظ الملف كـ HTML');
+            } catch (err) {
+                console.error('HTML Export error:', err);
+                showStatus('فشل حفظ الملف كـ HTML', true);
+            }
+        }
+        
+        // طباعة المستند
+        function printDocument() {
+            window.print();
+            showStatus('جاري الطباعة...');
+        }
+        
+        // مسح المحتوى
+        function clearContent() {
+            if (confirm('هل أنت متأكد من رغبتك في مسح المحتوى؟')) {
+                editor.innerHTML = '';
+                markdownInput.value = '';
+                localStorage.removeItem('markdownEditorContent');
+                localStorage.removeItem('markdownInputText');
+                showStatus('تم مسح المحتوى');
+            }
+        }
+        
+        // استعادة المحتوى من Markdown
+        function restoreFromMarkdown() {
+            convertMarkdown();
+            showStatus('تم استعادة المحتوى من Markdown');
+        }
+        
+        // عرض رسالة حالة
+        function showStatus(message, isError = false) {
+            if (statusTimeout) clearTimeout(statusTimeout);
+            statusMessage.textContent = message;
+            statusMessage.style.color = isError ? '#d32f2f' : '#4a6fa5';
+            
+            statusTimeout = setTimeout(() => {
+                statusMessage.textContent = '';
+            }, 3000);
+        }
+        
+        // إضافة debounce للحفظ التلقائي
+        function debouncedSave() {
+            isAutoSaving = true;
+            if (saveTimeout) clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(() => {
+                saveToLocalStorage();
+                isAutoSaving = false;
+                
+                // تحديث تخطيط الصفحات بعد الحفظ
+                updatePageLayout();
+            }, 700);
+        }
+        
+        // إضافة مستمعي الأحداث
+        convertBtn.addEventListener('click', convertMarkdown);
+        saveBtn.addEventListener('click', saveToLocalStorage);
+        exportBtn.addEventListener('click', exportToWord);
+        exportHtmlBtn.addEventListener('click', exportToHTML);
+        printBtn.addEventListener('click', printDocument);
+        clearBtn.addEventListener('click', clearContent);
+        restoreBtn.addEventListener('click', restoreFromMarkdown);
+        
+        // حفظ تلقائي عند التعديل في المحرر
+        editor.addEventListener('input', debouncedSave);
+        markdownInput.addEventListener('input', debouncedSave);
+        
+        // استعادة المحتوى المحفوظ عند تحميل الصفحة
+        window.addEventListener('DOMContentLoaded', loadFromLocalStorage);
+    </script>
+</body>
+</html>
